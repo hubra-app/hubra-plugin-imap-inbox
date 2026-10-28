@@ -13,7 +13,6 @@ module = Module(
             "hubra_inbox.routes",
             "inbox_bp",
             "/api/v1/inbox",
-            v2=(("/api/v2/tenants/inbox", "inbox_bp_v2"),),
         ),
     ),
     nav=(
