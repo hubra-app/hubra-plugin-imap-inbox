@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import email
 import email.policy
+import html as html_lib
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -186,7 +187,9 @@ def parse(raw: bytes) -> Parsed:
     if html is not None:
         out.html_body = sanitise_html(_decode(html))[: MAX_TEXT * 2]
     if out.text_body is None and out.html_body:
-        out.text_body = nh3.clean(out.html_body, tags=set())[:MAX_TEXT]
+        # Without tags the text still holds entities (&amp;, &lt;).
+        plain = nh3.clean(out.html_body, tags=set())
+        out.text_body = html_lib.unescape(plain)[:MAX_TEXT]
 
     for index, part in enumerate(msg.walk()):
         if part.is_multipart() or part in (body, html):

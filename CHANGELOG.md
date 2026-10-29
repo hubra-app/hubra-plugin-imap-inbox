@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.0
+
+Built for Hubra 0.2 (Mantine 9, plugin host API 2). Needs Hubra 0.2 or newer.
+
+## 1.0.1
+
+- One mailbox that drops the connection or answers with an IMAP error no
+  longer stops the sync of every later mailbox of the club. The error is
+  shown on that mailbox, and the others sync as usual.
+- The search date no longer depends on the server's locale.
+- The text of an HTML-only mail shows & and < instead of &amp; and &lt;.
+- A sender's Date header no longer decides retention or keeps a message
+  on top: old-dated mail is kept for the retention period from when it
+  was fetched, and a future date counts as now.
+- A mailbox deleted while the sync runs no longer stops the sync of the
+  club's other mailboxes.
+
 ## 1.0.0
 
 First release.

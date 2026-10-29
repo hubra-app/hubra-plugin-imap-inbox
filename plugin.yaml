@@ -1,7 +1,7 @@
 id: imap-inbox
 name: Shared inbox (IMAP)
-version: "1.0.0"
-hubra: ">=0.1,<1"
+version: "1.1.0"
+hubra: ">=0.2,<1"
 description: "Read club mailboxes hosted anywhere (Infomaniak, Hostpoint, Gmail with an app password...) inside Hubra. Read-only by default, each mailbox visible to one group, passwords stored encrypted."
 author: Hubra
 homepage: https://github.com/hubra-app/hubra-plugin-imap-inbox

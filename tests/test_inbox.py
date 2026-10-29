@@ -21,12 +21,13 @@ def _mail(
     refs=None,
     html=None,
     attach=False,
+    date="Tue, 27 Oct 2026 10:00:00 +0100",
 ):
     msg = EmailMessage()
     msg["From"] = sender
     msg["To"] = "info@club.ch"
     msg["Subject"] = subject
-    msg["Date"] = "Tue, 27 Oct 2026 10:00:00 +0100"
+    msg["Date"] = date
     msg["Message-ID"] = (
         msgid or f"<{''.join(c for c in subject if c.isalnum())}@example.ch>"
     )
@@ -337,11 +338,12 @@ def test_parse_text_from_html_only_mail():
     msg = EmailMessage()
     msg["From"] = "Lisa <lisa@example.ch>"
     msg["Subject"] = "=?utf-8?q?Gr=C3=BCezi?="
-    msg.set_content("<p>Nur <b>HTML</b></p>", subtype="html")
+    msg.set_content("<p>Nur <b>HTML</b> &amp; 3 &lt; 4</p>", subtype="html")
     p = parse.parse(msg.as_bytes())
     assert p.subject == "Grüezi"
     assert p.from_name == "Lisa" and p.from_address == "lisa@example.ch"
     assert "Nur" in p.text_body and "<b>" not in p.text_body
+    assert "& 3 < 4" in p.text_body
 
 
 @pytest.mark.parametrize(
@@ -406,3 +408,87 @@ def test_scheduled_sync(app, db, seeded_db, board, fake):
     db.session.commit()
     result = sync_all.run()
     assert list(result.values())[0]["fetched"] == 2
+
+
+def test_a_broken_mailbox_does_not_stop_the_others(db, board, fake, monkeypatch):
+    class Dropped(FakeImap):
+        def uid(self, command, *args):
+            if command == "FETCH":
+                raise imap.imaplib.IMAP4.abort("socket error: EOF")
+            return super().uid(command, *args)
+
+    broken = Dropped(fake.folders)
+    monkeypatch.setattr(
+        imap,
+        "_PinnedSSL",
+        lambda host, port, address, context: broken if host == "bad.example" else fake,
+    )
+    for name, host in (("A", "bad.example"), ("B", "good.example")):
+        db.session.add(
+            InboxMailbox(
+                name=name,
+                host=host,
+                username="u",
+                password_encrypted=crypto.encrypt("secret"),
+                folders=["INBOX"],
+                sync_state={},
+            )
+        )
+    db.session.commit()
+
+    services.sync_all()
+    bad = db.session.query(InboxMailbox).filter_by(name="A").one()
+    good = db.session.query(InboxMailbox).filter_by(name="B").one()
+    assert "EOF" in bad.last_error
+    assert good.last_error is None and good.last_sync_at is not None
+
+
+def test_search_dates_do_not_depend_on_the_locale():
+    from datetime import datetime
+
+    assert services._imap_date(datetime(2026, 3, 5)) == "05-Mar-2026"
+
+
+def test_sender_dates_do_not_drive_order_or_retention(
+    client, db, auth_headers, board, fake
+):
+    fake.folders["INBOX"][1][3] = _mail(
+        "Top forever", date="Fri, 01 Jan 2099 10:00:00 +0000"
+    )
+    fake.folders["INBOX"][1][4] = _mail("Old", date="Mon, 01 Jan 1990 10:00:00 +0000")
+    mailbox_id = _create(client).get_json()["id"]
+    client.post(f"/api/v1/inbox/mailboxes/{mailbox_id}/sync")
+    by_subject = {
+        m["subject"]: m for m in client.get("/api/v1/inbox/messages").get_json()
+    }
+    assert "Old" in by_subject
+    assert by_subject["Top forever"]["sentAt"] < "2099"
+
+
+def test_a_mailbox_deleted_during_sync_is_skipped(db, monkeypatch):
+    calls = []
+    real_get = db.session.get
+
+    def vanishing_get(model, ident, *a, **kw):
+        if model is InboxMailbox and ident == first_id:
+            return None  # deleted between reading the ids and loading it
+        return real_get(model, ident, *a, **kw)
+
+    for name in ("Gone", "Kept"):
+        db.session.add(
+            InboxMailbox(
+                name=name,
+                host="x.example",
+                username="u",
+                password_encrypted=crypto.encrypt("secret"),
+                folders=["INBOX"],
+                sync_state={},
+            )
+        )
+    db.session.commit()
+    first_id, second_id = sorted(m.id for m in db.session.query(InboxMailbox))
+    monkeypatch.setattr(db.session, "get", vanishing_get)
+    monkeypatch.setattr(services, "sync_mailbox", lambda m: calls.append(m.id) or {})
+
+    results = services.sync_all()
+    assert calls == [second_id] and first_id not in results
