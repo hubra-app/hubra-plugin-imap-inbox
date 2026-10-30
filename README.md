@@ -1,5 +1,7 @@
 # Shared inbox (IMAP)
 
+[![Test and release](https://github.com/hubra-app/hubra-plugin-imap-inbox/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/hubra-app/hubra-plugin-imap-inbox/actions/workflows/release.yml?query=branch%3Amain) [![Release](https://img.shields.io/github/v/release/hubra-app/hubra-plugin-imap-inbox)](https://github.com/hubra-app/hubra-plugin-imap-inbox/releases/latest) [![License: all rights reserved](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)](LICENSE)
+
 A plugin for [Hubra](https://hubra.club). Read club mailboxes hosted anywhere (Infomaniak, Hostpoint, Gmail with an app password...) inside Hubra. Read-only by default, each mailbox visible to one group, passwords stored encrypted.
 
 **Version** 1.0.0 · **Works with** Hubra >=0.1,<1 · **Plugin id** `imap-inbox`
