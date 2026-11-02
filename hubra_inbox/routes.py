@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, current_app, jsonify, request, send_file
 
 from hubra.api.auth.helpers import get_current_member
 from hubra.api.permissions import permission_required
@@ -120,7 +120,16 @@ def test_mailbox():
     except (TypeError, ValueError):
         return api_error("VALIDATION_ERROR", "Check the server settings", 400)
     except imap.ImapError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 200
+        current_app.logger.exception("Mailbox test failed: %s", exc)
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "error": "Unable to connect to mailbox with the provided settings",
+                }
+            ),
+            200,
+        )
     return jsonify({"ok": True, "folders": folders}), 200
 
 
