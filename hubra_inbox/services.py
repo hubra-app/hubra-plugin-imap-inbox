@@ -22,6 +22,8 @@ from .models import SECURITY, InboxMailbox, InboxMessage
 
 _log = logging.getLogger(__name__)
 
+SYNC_ERROR_MESSAGE = "Mailbox sync failed"
+
 # One sync run fetches at most this many new messages per folder; the rest
 # follow on the next run.
 BATCH = 200
@@ -311,8 +313,9 @@ def sync_mailbox(mailbox: InboxMailbox) -> dict:
         # Re-encrypt with the current key (after a key rotation).
         mailbox.password_encrypted = crypto.rotate(mailbox.password_encrypted)
         conn = imap.connect(account)
-    except (imap.ImapError, ValueError) as exc:
-        mailbox.last_error = str(exc)[:500]
+    except (imap.ImapError, ValueError):
+        _log.exception("inbox %s: mailbox sync setup failed", mailbox.id)
+        mailbox.last_error = SYNC_ERROR_MESSAGE
         mailbox.last_sync_at = now
         return {"error": mailbox.last_error}
     state = dict(mailbox.sync_state or {})
@@ -339,10 +342,11 @@ def sync_mailbox(mailbox: InboxMailbox) -> dict:
                 fetched += 1
             state[folder] = folder_state
         mailbox.last_error = None
-    except (imap.ImapError, imaplib.IMAP4.error, OSError) as exc:
+    except (imap.ImapError, imaplib.IMAP4.error, OSError):
         # imaplib raises its own errors (and socket timeouts) on select and
         # fetch; they belong to this mailbox, not to the whole sync.
-        mailbox.last_error = str(exc)[:500] or type(exc).__name__
+        _log.exception("inbox %s: mailbox sync failed", mailbox.id)
+        mailbox.last_error = SYNC_ERROR_MESSAGE
     finally:
         imap.close(conn)
     mailbox.sync_state = state
