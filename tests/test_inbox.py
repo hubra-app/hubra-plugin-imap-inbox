@@ -439,7 +439,7 @@ def test_a_broken_mailbox_does_not_stop_the_others(db, board, fake, monkeypatch)
     services.sync_all()
     bad = db.session.query(InboxMailbox).filter_by(name="A").one()
     good = db.session.query(InboxMailbox).filter_by(name="B").one()
-    assert "EOF" in bad.last_error
+    assert bad.last_error == services.SYNC_ERROR_MESSAGE  # details stay in the log
     assert good.last_error is None and good.last_sync_at is not None
 
 
