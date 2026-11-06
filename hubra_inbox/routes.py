@@ -6,9 +6,9 @@ import io
 
 from flask import Blueprint, current_app, jsonify, request, send_file
 
-from hubra.api.auth.helpers import get_current_member
-from hubra.api.permissions import permission_required
-from hubra.api.utils import log_audit
+from hubra.core.auth.helpers import get_current_member
+from hubra.core.permissions import permission_required
+from hubra.core.utils import log_audit
 from hubra.core.errors import api_error
 from hubra.core.extensions import db
 

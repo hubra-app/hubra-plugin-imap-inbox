@@ -8,14 +8,10 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, func, or_, select
 
-from hubra.api.permissions import (
-    _derive_perm_key,
-    _get_member_permission_keys,
-    member_is_admin,
-)
 from hubra.core.errors import raise_error
 from hubra.core.extensions import db
 from hubra.core.models.group import Group, GroupMembership
+from hubra.core.permissions import member_has_permission
 
 from . import crypto, imap, parse
 from .models import SECURITY, InboxMailbox, InboxMessage
@@ -32,11 +28,12 @@ BATCH = 200
 # ── Access ───────────────────────────────────────────────────────────────────
 
 
+# The right the routes' @permission_required("mailboxes", "manage") checks.
+MANAGE = "inbox.mailboxes.manage"
+
+
 def can_manage(member) -> bool:
-    if member_is_admin(member):
-        return True
-    key = _derive_perm_key("inbox_bp", "mailboxes", "manage")
-    return key in _get_member_permission_keys(member)
+    return member_has_permission(member, MANAGE)
 
 
 def visible_mailbox_ids(member) -> set[int]:
