@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+The mailbox set-up moved from the "Mailboxes" dialog to the page's last tab,
+Posteingang › Einstellungen (`/app/inbox/settings`), shown to those who may
+manage mailboxes. Each mailbox is still edited in its own dialog. This
+follows Hubra's rule that a setting lives on the page it configures.
+
 ## 1.1.0
 
 Built for Hubra 0.2 (Mantine 9, plugin host API 2). Needs Hubra 0.2 or newer.
