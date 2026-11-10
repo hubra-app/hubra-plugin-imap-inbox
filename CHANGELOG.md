@@ -6,6 +6,7 @@
   Letters and Messengers. Needs a Hubra with that area (after 0.2.5); older
   versions show it under a heading of its own.
 - Dashboard widget **Offene Mails**: mails not marked done yet, newest first, from the mailboxes the member may read (needs `inbox.messages.read`).
+- German texts are in Standard German now; they were still in Swiss German dialect.
 
 ## 1.2.0
 
@@ -13,6 +14,7 @@ The mailbox set-up moved from the "Mailboxes" dialog to the page's last tab,
 Posteingang › Einstellungen (`/app/inbox/settings`), shown to those who may
 manage mailboxes. Each mailbox is still edited in its own dialog. This
 follows Hubra's rule that a setting lives on the page it configures.
+- Dashboard widget **Offene Mails**: mails not marked done yet, newest first, from the mailboxes the member may read (needs `inbox.messages.read`).
 
 ## 1.1.0
 
