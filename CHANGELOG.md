@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The menu entry moves to the new sidebar area **Kommunikation**, next to Mail,
+  Letters and Messengers. Needs a Hubra with that area (after 0.2.5); older
+  versions show it under a heading of its own.
 - Dashboard widget **Offene Mails**: mails not marked done yet, newest first, from the mailboxes the member may read (needs `inbox.messages.read`).
 
 ## 1.2.0
