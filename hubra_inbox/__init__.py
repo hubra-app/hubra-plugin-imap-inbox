@@ -21,6 +21,7 @@ module = Module(
             "/app/inbox",
             "shell.nav.inbox",
             "inbox",
+            section="communication",
             order=45,
             perms=("inbox.messages.read",),
         ),
