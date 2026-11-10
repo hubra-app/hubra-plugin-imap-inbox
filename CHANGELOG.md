@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Dashboard widget **Offene Mails**: mails not marked done yet, newest first, from the mailboxes the member may read (needs `inbox.messages.read`).
+
 ## 1.2.0
 
 The mailbox set-up moved from the "Mailboxes" dialog to the page's last tab,
