@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   ActionIcon,
   Alert,
@@ -20,10 +21,11 @@ import {
   IconCheck,
   IconPaperclip,
   IconRefresh,
+  IconInbox,
   IconSearch,
   IconSettings,
 } from '@tabler/icons-react'
-import { PageHead, formatDateTime, useT, useToast } from '@hubra/plugin-sdk'
+import { PageHead, Tabs, formatDateTime, useT, useToast } from '@hubra/plugin-sdk'
 import {
   downloadAttachment,
   getMessage,
@@ -41,11 +43,12 @@ export function InboxScreen() {
   const { t } = useT()
   const { notify } = useToast()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [mailboxId, setMailboxId] = useState<number | null>(null)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<Filter>('open')
   const [selected, setSelected] = useState<number | null>(null)
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
 
   const { data: boxes } = useQuery({ queryKey: ['inbox-mailboxes'], queryFn: listMailboxes })
@@ -99,6 +102,9 @@ export function InboxScreen() {
   }
 
   const errors = mailboxes.filter((m) => m.lastError)
+  // The mailbox set-up is the page's last tab, Einstellungen, for those who
+  // may manage mailboxes (docs/settings/structure.md in hubra).
+  const settings = Boolean(boxes?.canManage) && location.pathname.endsWith('/inbox/settings')
 
   return (
     <Stack gap="md">
@@ -119,138 +125,145 @@ export function InboxScreen() {
             >
               {t('inbox.syncNow', 'Sync now')}
             </Button>
-            {boxes?.canManage && (
-              <Button
-                variant="default"
-                leftSection={<IconSettings size={16} />}
-                onClick={() => setSettingsOpen(true)}
-              >
-                {t('inbox.mailboxes', 'Mailboxes')}
-              </Button>
-            )}
           </Group>
         }
       />
 
-      {errors.map((m) => (
-        <Alert key={m.id} color="red" variant="light" title={m.name}>
-          {m.lastError}
-        </Alert>
-      ))}
-
-      {boxes && mailboxes.length === 0 ? (
-        <Paper withBorder radius="lg" p="xl">
-          <Text fw={600}>{t('inbox.emptyTitle', 'No mailbox yet')}</Text>
-          <Text fz="sm" c="dimmed">
-            {boxes.canManage
-              ? t(
-                  'inbox.emptyManage',
-                  'Add the club mailbox (for example info@) under Mailboxes. Hubra reads it without changing anything on the server.',
-                )
-              : t('inbox.emptyMember', 'No mailbox is shared with your groups yet.')}
-          </Text>
-        </Paper>
-      ) : (
-        <Group align="flex-start" gap="md" wrap="nowrap" style={{ minHeight: 480 }}>
-          <Paper withBorder radius="lg" p="sm" style={{ width: 380, flexShrink: 0 }}>
-            <Stack gap="xs">
-              <Select
-                size="xs"
-                data={[
-                  { value: '', label: t('inbox.allMailboxes', 'All mailboxes') },
-                  ...mailboxes.map((m) => ({
-                    value: String(m.id),
-                    label: m.unread ? `${m.name} (${m.unread})` : m.name,
-                  })),
-                ]}
-                value={mailboxId ? String(mailboxId) : ''}
-                onChange={(v) => {
-                  setMailboxId(v ? Number(v) : null)
-                  setSelected(null)
-                }}
-                allowDeselect={false}
-              />
-              <TextInput
-                size="xs"
-                leftSection={<IconSearch size={14} />}
-                placeholder={t('inbox.search', 'Search subject, sender, text')}
-                value={search}
-                onChange={(e) => setSearch(e.currentTarget.value)}
-              />
-              <SegmentedControl
-                size="xs"
-                value={filter}
-                onChange={(v) => setFilter(v as Filter)}
-                data={[
-                  { value: 'open', label: t('inbox.open', 'Open') },
-                  { value: 'done', label: t('inbox.done', 'Done') },
-                  { value: 'all', label: t('inbox.all', 'All') },
-                ]}
-              />
-              {isLoading && <Loader size="sm" />}
-              {!isLoading && messages.length === 0 && (
-                <Text fz="sm" c="dimmed" ta="center" py="md">
-                  {t('inbox.noMessages', 'No messages')}
-                </Text>
-              )}
-              <Stack gap={2} style={{ maxHeight: 640, overflowY: 'auto' }}>
-                {messages.map((m) => (
-                  <UnstyledButton
-                    key={m.id}
-                    onClick={() => setSelected(m.id)}
-                    p="xs"
-                    style={{
-                      borderRadius: 8,
-                      background:
-                        selected === m.id ? 'var(--mantine-color-default-hover)' : undefined,
-                    }}
-                  >
-                    <Group justify="space-between" gap={4} wrap="nowrap">
-                      <Text fz="sm" fw={m.done ? 400 : 600} truncate>
-                        {m.fromName || m.fromAddress || '—'}
-                      </Text>
-                      <Text fz="xs" c="dimmed" style={{ flexShrink: 0 }}>
-                        {m.sentAt ? formatDateTime(m.sentAt) : ''}
-                      </Text>
-                    </Group>
-                    <Group gap={4} wrap="nowrap">
-                      {m.hasAttachments && <IconPaperclip size={12} />}
-                      <Text fz="sm" truncate>
-                        {m.subject || t('inbox.noSubject', '(no subject)')}
-                      </Text>
-                    </Group>
-                    <Text fz="xs" c="dimmed" truncate>
-                      {m.preview}
-                    </Text>
-                  </UnstyledButton>
-                ))}
-              </Stack>
-            </Stack>
-          </Paper>
-
-          <Paper withBorder radius="lg" p="lg" style={{ flex: 1, minWidth: 0 }}>
-            {message ? (
-              <MessageView
-                message={message}
-                onToggleDone={() => toggleDone(message)}
-                onError={fail}
-              />
-            ) : (
-              <Text c="dimmed" ta="center" py="xl">
-                {t('inbox.pick', 'Pick a message')}
-              </Text>
-            )}
-          </Paper>
-        </Group>
+      {boxes?.canManage && (
+        <Tabs
+          tabs={[
+            {
+              id: 'messages',
+              label: t('inbox.tabs.messages', 'Messages'),
+              icon: <IconInbox size={16} />,
+            },
+            {
+              id: 'settings',
+              label: t('inbox.tabs.settings', 'Settings'),
+              icon: <IconSettings size={16} />,
+            },
+          ]}
+          activeTab={settings ? 'settings' : 'messages'}
+          onTabChange={(id) => navigate(id === 'settings' ? '/app/inbox/settings' : '/app/inbox')}
+        />
       )}
 
-      {boxes?.canManage && (
-        <MailboxSettings
-          open={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
-          mailboxes={mailboxes}
-          onChanged={refresh}
-        />
+      {settings ? (
+        <MailboxSettings mailboxes={mailboxes} onChanged={refresh} />
+      ) : (
+        <>
+          {errors.map((m) => (
+            <Alert key={m.id} color="red" variant="light" title={m.name}>
+              {m.lastError}
+            </Alert>
+          ))}
+
+          {boxes && mailboxes.length === 0 ? (
+            <Paper withBorder radius="lg" p="xl">
+              <Text fw={600}>{t('inbox.emptyTitle', 'No mailbox yet')}</Text>
+              <Text fz="sm" c="dimmed">
+                {boxes.canManage
+                  ? t(
+                      'inbox.emptyManage',
+                      'Add the club mailbox (for example info@) under Settings. Hubra reads it without changing anything on the server.',
+                    )
+                  : t('inbox.emptyMember', 'No mailbox is shared with your groups yet.')}
+              </Text>
+            </Paper>
+          ) : (
+            <Group align="flex-start" gap="md" wrap="nowrap" style={{ minHeight: 480 }}>
+              <Paper withBorder radius="lg" p="sm" style={{ width: 380, flexShrink: 0 }}>
+                <Stack gap="xs">
+                  <Select
+                    size="xs"
+                    data={[
+                      { value: '', label: t('inbox.allMailboxes', 'All mailboxes') },
+                      ...mailboxes.map((m) => ({
+                        value: String(m.id),
+                        label: m.unread ? `${m.name} (${m.unread})` : m.name,
+                      })),
+                    ]}
+                    value={mailboxId ? String(mailboxId) : ''}
+                    onChange={(v) => {
+                      setMailboxId(v ? Number(v) : null)
+                      setSelected(null)
+                    }}
+                    allowDeselect={false}
+                  />
+                  <TextInput
+                    size="xs"
+                    leftSection={<IconSearch size={14} />}
+                    placeholder={t('inbox.search', 'Search subject, sender, text')}
+                    value={search}
+                    onChange={(e) => setSearch(e.currentTarget.value)}
+                  />
+                  <SegmentedControl
+                    size="xs"
+                    value={filter}
+                    onChange={(v) => setFilter(v as Filter)}
+                    data={[
+                      { value: 'open', label: t('inbox.open', 'Open') },
+                      { value: 'done', label: t('inbox.done', 'Done') },
+                      { value: 'all', label: t('inbox.all', 'All') },
+                    ]}
+                  />
+                  {isLoading && <Loader size="sm" />}
+                  {!isLoading && messages.length === 0 && (
+                    <Text fz="sm" c="dimmed" ta="center" py="md">
+                      {t('inbox.noMessages', 'No messages')}
+                    </Text>
+                  )}
+                  <Stack gap={2} style={{ maxHeight: 640, overflowY: 'auto' }}>
+                    {messages.map((m) => (
+                      <UnstyledButton
+                        key={m.id}
+                        onClick={() => setSelected(m.id)}
+                        p="xs"
+                        style={{
+                          borderRadius: 8,
+                          background:
+                            selected === m.id ? 'var(--mantine-color-default-hover)' : undefined,
+                        }}
+                      >
+                        <Group justify="space-between" gap={4} wrap="nowrap">
+                          <Text fz="sm" fw={m.done ? 400 : 600} truncate>
+                            {m.fromName || m.fromAddress || '—'}
+                          </Text>
+                          <Text fz="xs" c="dimmed" style={{ flexShrink: 0 }}>
+                            {m.sentAt ? formatDateTime(m.sentAt) : ''}
+                          </Text>
+                        </Group>
+                        <Group gap={4} wrap="nowrap">
+                          {m.hasAttachments && <IconPaperclip size={12} />}
+                          <Text fz="sm" truncate>
+                            {m.subject || t('inbox.noSubject', '(no subject)')}
+                          </Text>
+                        </Group>
+                        <Text fz="xs" c="dimmed" truncate>
+                          {m.preview}
+                        </Text>
+                      </UnstyledButton>
+                    ))}
+                  </Stack>
+                </Stack>
+              </Paper>
+
+              <Paper withBorder radius="lg" p="lg" style={{ flex: 1, minWidth: 0 }}>
+                {message ? (
+                  <MessageView
+                    message={message}
+                    onToggleDone={() => toggleDone(message)}
+                    onError={fail}
+                  />
+                ) : (
+                  <Text c="dimmed" ta="center" py="xl">
+                    {t('inbox.pick', 'Pick a message')}
+                  </Text>
+                )}
+              </Paper>
+            </Group>
+          )}
+        </>
       )}
     </Stack>
   )

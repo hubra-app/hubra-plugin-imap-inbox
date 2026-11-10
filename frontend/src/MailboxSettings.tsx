@@ -5,6 +5,7 @@ import {
   Group,
   MultiSelect,
   NumberInput,
+  Paper,
   PasswordInput,
   Select,
   Stack,
@@ -56,14 +57,11 @@ function toInput(m: Mailbox): MailboxInput {
   }
 }
 
+/** Inbox › Einstellungen: the club's mailboxes, each edited in a dialog. */
 export function MailboxSettings({
-  open,
-  onClose,
   mailboxes,
   onChanged,
 }: {
-  open: boolean
-  onClose: () => void
   mailboxes: Mailbox[]
   onChanged: () => Promise<void>
 }) {
@@ -78,7 +76,6 @@ export function MailboxSettings({
   const { data: groups = [] } = useQuery({
     queryKey: ['inbox-groups'],
     queryFn: listGroupOptions,
-    enabled: open,
   })
 
   const edit = (m: Mailbox | 'new') => {
@@ -150,17 +147,13 @@ export function MailboxSettings({
 
   return (
     <>
-      <Modal
-        open={open && editing === null}
-        onClose={onClose}
-        title={t('inbox.mailboxes', 'Mailboxes')}
-        wide
-        footer={
+      <Paper withBorder radius="lg" p="lg">
+        <Group justify="space-between" mb="sm">
+          <Text fw={600}>{t('inbox.mailboxes', 'Mailboxes')}</Text>
           <Button leftSection={<IconPlus size={16} />} onClick={() => edit('new')}>
             {t('inbox.addMailbox', 'Add mailbox')}
           </Button>
-        }
-      >
+        </Group>
         {mailboxes.length === 0 ? (
           <Text c="dimmed" fz="sm">
             {t('inbox.noMailboxes', 'No mailbox set up yet.')}
@@ -208,10 +201,10 @@ export function MailboxSettings({
             </Table.Tbody>
           </Table>
         )}
-      </Modal>
+      </Paper>
 
       <Modal
-        open={open && editing !== null}
+        open={editing !== null}
         onClose={() => setEditing(null)}
         title={
           editing === 'new'
