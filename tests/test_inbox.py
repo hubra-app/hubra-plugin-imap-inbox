@@ -492,3 +492,33 @@ def test_a_mailbox_deleted_during_sync_is_skipped(db, monkeypatch):
 
     results = services.sync_all()
     assert calls == [second_id] and first_id not in results
+
+
+# ── Dashboard widgets ───────────────────────────────────────────────────────
+
+
+def test_open_widget(db, seeded_db, board):
+    from datetime import datetime, timezone
+
+    from hubra.core import contracts
+
+    box = InboxMailbox(
+        name="Info", host="h", username="u", password_encrypted=crypto.encrypt("x"),
+        group_id=board.id, folders=["INBOX"], sync_state={},
+    )
+    db.session.add(box)
+    db.session.flush()
+
+    def mail(uid, subject, done=False, day=1):
+        return InboxMessage(
+            mailbox_id=box.id, folder="INBOX", uid=uid, uidvalidity=1, subject=subject,
+            from_name="Anna", sent_at=datetime(2026, 11, day, 9, 0, tzinfo=timezone.utc),
+            done=done,
+        )
+
+    db.session.add_all([mail(1, "Alt", day=1), mail(2, "Neu", day=3), mail(3, "Fertig", True, 4)])
+    db.session.commit()
+
+    out = contracts.widget_data("inbox.open", {}, actor=seeded_db["admin"])
+    assert [i["label"] for i in out["items"]] == ["Neu", "Alt"]
+    assert out["total"] == 2 and out["items"][0]["sub"] == "Anna · 03.11. 09:00"

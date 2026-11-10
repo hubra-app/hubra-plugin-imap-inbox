@@ -49,6 +49,11 @@
       "tabs": {
         "messages": "Messages",
         "settings": "Settings"
+      },
+      "widget": {
+        "open": "Open mails",
+        "openHint": "Mails in the shared inbox not marked done yet",
+        "count": "How many"
       }
     },
     "shell": {
@@ -107,6 +112,11 @@
       "tabs": {
         "messages": "Nachrichten",
         "settings": "Einstellungen"
+      },
+      "widget": {
+        "open": "Offene Mails",
+        "openHint": "Mails im Vereinspostfach, die noch nicht erledigt sind",
+        "count": "Wie viele"
       }
     },
     "shell": {
