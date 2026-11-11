@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, func, or_, select
 
+from hubra.core.auth import api_tokens
 from hubra.core.errors import raise_error
 from hubra.core.extensions import db
 from hubra.core.models.group import Group, GroupMembership
@@ -19,6 +20,13 @@ from .models import SECURITY, InboxMailbox, InboxMessage
 _log = logging.getLogger(__name__)
 
 SYNC_ERROR_MESSAGE = "Mailbox sync failed"
+# What a reader sees when an attachment can't be fetched; the details (server
+# name, its answer) are for the log and the people who manage mailboxes.
+UNREACHABLE_MESSAGE = "The mailbox can't be reached right now"
+
+# A member who only reads may start a sync once a minute; the scheduled sync
+# runs every five minutes anyway.  People who manage mailboxes are not held.
+MANUAL_SYNC_COOLDOWN = timedelta(seconds=60)
 
 # One sync run fetches at most this many new messages per folder; the rest
 # follow on the next run.
@@ -33,7 +41,15 @@ MANAGE = "inbox.mailboxes.manage"
 
 
 def can_manage(member) -> bool:
-    return member_has_permission(member, MANAGE)
+    """The member may manage mailboxes, and so read all of them.
+
+    On an API token the token's scopes count too: a token made for reading
+    the inbox doesn't see every mailbox or the server settings just because
+    its owner manages them.
+    """
+    if not member_has_permission(member, MANAGE):
+        return False
+    return api_tokens.club_scope_refusal(member, MANAGE) is None
 
 
 def visible_mailbox_ids(member) -> set[int]:
@@ -162,8 +178,11 @@ def _validate(data: dict, partial: bool) -> dict:
         out["folders"] = folders or ["INBOX"]
     if "groupId" in data:
         group_id = data["groupId"]
-        if group_id is not None and db.session.get(Group, group_id) is None:
-            raise_error(404, "NOT_FOUND", "Group not found")
+        if group_id is not None:
+            if isinstance(group_id, bool) or not isinstance(group_id, int):
+                raise_error(400, "VALIDATION_ERROR", "groupId must be a number")
+            if db.session.get(Group, group_id) is None:
+                raise_error(404, "NOT_FOUND", "Group not found")
         out["group_id"] = group_id
     for key, attr in (("markSeen", "mark_seen"), ("active", "active")):
         if key in data:
@@ -301,6 +320,16 @@ def _store(
     )
 
 
+def sync_too_soon(mailbox: InboxMailbox, member) -> bool:
+    """A reader asked for a sync while the last one is less than a minute old."""
+    if mailbox.last_sync_at is None or can_manage(member):
+        return False
+    last = mailbox.last_sync_at
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - last < MANUAL_SYNC_COOLDOWN
+
+
 def sync_mailbox(mailbox: InboxMailbox) -> dict:
     """Fetch new messages of every folder.  Errors are stored, not raised."""
     now = datetime.now(timezone.utc)
@@ -383,14 +412,15 @@ def sync_all() -> dict:
         try:
             results[mailbox_id] = sync_mailbox(mailbox)
             db.session.commit()
-        except Exception as exc:
+        except Exception:
             # One broken mailbox must not stop the others.
             db.session.rollback()
             _log.exception("inbox sync failed mailbox_id=%s", mailbox_id)
             mailbox = db.session.get(InboxMailbox, mailbox_id)
             if mailbox is None:
                 continue
-            mailbox.last_error = (str(exc) or type(exc).__name__)[:500]
+            # Shown to every reader of the mailbox: the details stay in the log.
+            mailbox.last_error = SYNC_ERROR_MESSAGE
             mailbox.last_sync_at = datetime.now(timezone.utc)
             db.session.commit()
             results[mailbox_id] = {"error": mailbox.last_error}
@@ -456,15 +486,17 @@ class MessageService:
         mailbox = message.mailbox
         try:
             conn = imap.connect(account_of(mailbox))
-        except (imap.ImapError, ValueError) as exc:
-            raise_error(502, "MAILBOX_UNREACHABLE", str(exc))
+        except (imap.ImapError, ValueError):
+            _log.warning("inbox %s: attachment fetch failed", mailbox.id, exc_info=True)
+            raise_error(502, "MAILBOX_UNREACHABLE", UNREACHABLE_MESSAGE)
         try:
             validity = imap.select(conn, message.folder, readonly=True)
             if validity != message.uidvalidity:
                 raise_error(410, "GONE", "The message is no longer on the server")
             raw, _ = imap.fetch(conn, message.uid, peek=True)
-        except imap.ImapError as exc:
-            raise_error(502, "MAILBOX_UNREACHABLE", str(exc))
+        except (imap.ImapError, imaplib.IMAP4.error, OSError):
+            _log.warning("inbox %s: attachment fetch failed", mailbox.id, exc_info=True)
+            raise_error(502, "MAILBOX_UNREACHABLE", UNREACHABLE_MESSAGE)
         finally:
             imap.close(conn)
         found = parse.attachment(raw or b"", index)

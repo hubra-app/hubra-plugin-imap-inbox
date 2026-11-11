@@ -158,6 +158,14 @@ def _decode(part) -> str:
     return content if isinstance(content, str) else ""
 
 
+def safe_filename(name: str | None, index: int) -> str:
+    """The sender's file name without folders, control characters or dots in
+    front, so a download never lands outside the folder or as a hidden file."""
+    name = re.sub(r"[\x00-\x1f\x7f]", "", name or "")
+    name = name.replace("\\", "/").rsplit("/", 1)[-1].strip().lstrip(".")
+    return name[:255] or f"attachment-{index}"
+
+
 def parse(raw: bytes) -> Parsed:
     msg = email.message_from_bytes(raw, policy=email.policy.default)
     from_pairs = getaddresses([str(v) for v in (msg.get_all("From") or [])])
@@ -202,7 +210,7 @@ def parse(raw: bytes) -> Parsed:
         out.attachments.append(
             {
                 "index": index,
-                "filename": (filename or f"attachment-{index}")[:255],
+                "filename": safe_filename(filename, index),
                 "contentType": part.get_content_type(),
                 "size": len(payload),
             }
@@ -216,7 +224,7 @@ def attachment(raw: bytes, index: int) -> tuple[str, str, bytes] | None:
     for i, part in enumerate(msg.walk()):
         if i == index and not part.is_multipart():
             return (
-                part.get_filename() or f"attachment-{index}",
+                safe_filename(part.get_filename(), index),
                 part.get_content_type(),
                 part.get_payload(decode=True) or b"",
             )

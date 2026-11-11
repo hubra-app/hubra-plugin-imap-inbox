@@ -524,6 +524,137 @@ def test_open_widget(db, seeded_db, board):
     assert out["total"] == 2 and out["items"][0]["sub"] == "Anna · 03.11. 09:00"
 
 
+# ── Security review 2026-11 ─────────────────────────────────────────────────
+
+
+def test_a_token_scoped_to_reading_does_not_manage(app, db, seeded_db, board):
+    from flask import g
+
+    admin = seeded_db["admin"]
+    box = InboxMailbox(
+        name="Kasse", host="h", username="u", password_encrypted=crypto.encrypt("x"),
+        folders=["INBOX"], sync_state={},
+    )
+    db.session.add(box)
+    db.session.flush()
+    with app.test_request_context():
+        assert services.can_manage(admin)
+        g.api_token = {"kind": "club", "scopes": {"inbox.messages.read"}}
+        assert not services.can_manage(admin)
+        # Not in the mailbox's group, and the token can't manage: not visible.
+        assert services.visible_mailbox_ids(admin) == set()
+        g.api_token = {"kind": "club", "scopes": {services.MANAGE}}
+        assert services.can_manage(admin)
+
+
+def test_readers_see_no_server_details_in_errors(db, board, fake, monkeypatch):
+    def boom(*_a, **_kw):
+        raise RuntimeError("password authentication failed at db.internal:5432")
+
+    db.session.add(
+        InboxMailbox(
+            name="A", host="imap.example.ch", username="u",
+            password_encrypted=crypto.encrypt("secret"), folders=["INBOX"],
+            sync_state={},
+        )
+    )
+    db.session.commit()
+    monkeypatch.setattr(services, "sync_mailbox", boom)
+    [result] = services.sync_all().values()
+    assert result["error"] == services.SYNC_ERROR_MESSAGE
+
+
+def test_attachment_errors_hide_the_server(client, db, auth_headers, board, fake, monkeypatch):
+    fake.folders["INBOX"][1][5] = _mail("Mit Anhang", attach=True)
+    mailbox_id = _create(client).get_json()["id"]
+    client.post(f"/api/v1/inbox/mailboxes/{mailbox_id}/sync")
+    msg = next(
+        m for m in client.get("/api/v1/inbox/messages").get_json() if m["hasAttachments"]
+    )
+    detail = client.get(f"/api/v1/inbox/messages/{msg['id']}").get_json()
+
+    def unreachable(account):
+        raise imap.ImapError(f"Can't reach {account.host}:{account.port}: refused")
+
+    monkeypatch.setattr(imap, "connect", unreachable)
+    resp = client.get(
+        f"/api/v1/inbox/messages/{msg['id']}/attachments/{detail['attachments'][0]['index']}"
+    )
+    assert resp.status_code == 502
+    assert "imap.example.ch" not in resp.get_data(as_text=True)
+
+
+def test_readers_can_not_hammer_the_mail_server(app, db, seeded_db, board, fake):
+    from datetime import datetime, timedelta, timezone
+
+    user = User(email="r@test.ch", first_name="Rea", last_name="Leser")
+    user.set_password("password123")
+    db.session.add(user)
+    db.session.flush()
+    reader = Member(user_id=user.id, status="active", tier_id=seeded_db["tier"].id)
+    db.session.add(reader)
+    db.session.flush()
+    box = InboxMailbox(
+        name="Info", host="h", username="u", password_encrypted=crypto.encrypt("x"),
+        group_id=board.id, folders=["INBOX"], sync_state={},
+    )
+    db.session.add(box)
+    db.session.flush()
+    assert not services.sync_too_soon(box, reader)  # never synced
+    box.last_sync_at = datetime.now(timezone.utc) - timedelta(seconds=10)
+    with app.test_request_context():
+        assert services.sync_too_soon(box, reader)
+        assert not services.sync_too_soon(box, seeded_db["admin"])  # a manager
+    box.last_sync_at = datetime.now(timezone.utc) - timedelta(minutes=2)
+    assert not services.sync_too_soon(box, reader)
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "::ffff:127.0.0.1",
+        "::ffff:10.0.0.1",
+        "::127.0.0.1",
+        "64:ff9b::a9fe:a9fe",  # NAT64 of 169.254.169.254
+        "2002:7f00:1::1",  # 6to4 of 127.0.0.1
+    ],
+)
+def test_private_ipv4_inside_ipv6_is_refused(app, host):
+    with app.app_context(), pytest.raises(imap.ImapError):
+        imap.resolve(host, 993)
+
+
+def test_public_ipv6_is_allowed(app, monkeypatch):
+    import socket
+
+    monkeypatch.setattr(
+        socket, "getaddrinfo", lambda *a, **kw: [(0, 0, 0, "", ("2001:4860:4860::8888", 993))]
+    )
+    with app.app_context():
+        assert imap.resolve("imap.example.ch", 993) == "2001:4860:4860::8888"
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("../../etc/passwd", "passwd"),
+        ("C:\\Users\\x\\evil.exe", "evil.exe"),
+        (".bashrc", "bashrc"),
+        ("a\r\nb.pdf", "ab.pdf"),
+        ("../", "attachment-3"),
+        (None, "attachment-3"),
+        ("Anmeldung 2026.pdf", "Anmeldung 2026.pdf"),
+    ],
+)
+def test_attachment_file_names_are_made_safe(name, expected):
+    assert parse.safe_filename(name, 3) == expected
+
+
+def test_group_id_must_be_a_number(client, auth_headers, board, fake):
+    resp = _create(client, groupId="1 OR 1=1")
+    assert resp.status_code == 400
+
+
 def test_an_oversized_server_answer_is_refused():
     # RFC822.SIZE comes from the server; a server that lies about it
     # must not push more than a message may hold into the worker.

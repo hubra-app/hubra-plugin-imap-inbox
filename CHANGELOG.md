@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+Security review (2026-11):
+
+- An API token scoped to reading the inbox no longer sees every mailbox or
+  the server settings because its owner manages mailboxes.
+- Readers no longer see server names or the server's answer when a sync or
+  an attachment download fails; the details go to the log.
+- A member who only reads may start a sync once a minute (each one is a
+  login at the club's mail server); managers are not held.
+- Private addresses hidden inside IPv6 (::ffff:10.0.0.1, NAT64, 6to4,
+  Teredo) are refused like plain private ones.
+- Attachment file names lose folders, control characters and leading dots.
+- `groupId` must be a number; the server's login error never reaches the
+  log as a chained exception.
+- Needs Hubra 0.2.1 or later (the dashboard widget contract); 0.2.0 failed
+  to load the plugin.
 - Mailbox dialog: Abbrechen outlined like other dialogs, Enter saves.
 - The menu entry moves to the new sidebar area **Kommunikation**, next to Mail,
   Letters and Messengers. Needs a Hubra with that area (after 0.2.5); older
