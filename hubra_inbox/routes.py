@@ -136,13 +136,19 @@ def test_mailbox():
 @inbox_bp.post("/mailboxes/<int:mailbox_id>/sync")
 @permission_required("messages", "read", "Read the shared inbox")
 def sync_mailbox(mailbox_id: int):
-    mailbox = mailbox_for(get_current_member(), mailbox_id)
-    result = services.sync_mailbox(mailbox)
-    db.session.commit()
+    member = get_current_member()
+    mailbox = mailbox_for(member, mailbox_id)
+    if services.sync_too_soon(mailbox, member):
+        # Every click is a login at the club's mail server: too many and the
+        # provider locks the account or blocks Hubra's address.
+        result = {"fetched": 0, "error": mailbox.last_error, "skipped": True}
+    else:
+        result = services.sync_mailbox(mailbox)
+        db.session.commit()
     return jsonify(
         {
             **result,
-            "mailbox": mailbox_to_dict(mailbox, can_manage(get_current_member())),
+            "mailbox": mailbox_to_dict(mailbox, can_manage(member)),
         }
     ), 200
 

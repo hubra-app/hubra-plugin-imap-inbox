@@ -38,6 +38,27 @@ def _allow_private() -> bool:
     return str(raw).lower() in ("1", "true", "yes")
 
 
+_NAT64 = ipaddress.ip_network("64:ff9b::/96")
+
+
+def _is_public(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """A global address, also for the IPv4 address inside an IPv6 one
+    (::ffff:10.0.0.1, ::127.0.0.1, 6to4, Teredo, NAT64), which some stacks
+    route to that IPv4 address."""
+    if not ip.is_global:
+        return False
+    if isinstance(ip, ipaddress.IPv6Address):
+        inner = [ip.ipv4_mapped, ip.sixtofour]
+        if ip.teredo:
+            inner.append(ip.teredo[1])
+        if ip in _NAT64 or int(ip) >> 32 == 0:
+            # NAT64 and the old IPv4-compatible form carry it in the last 32 bits.
+            inner.append(ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF))
+        if any(v4 is not None and not v4.is_global for v4 in inner):
+            return False
+    return True
+
+
 def resolve(host: str, port: int) -> str:
     """The address to connect to, after the private-network check."""
     host = (host or "").strip()
@@ -51,8 +72,7 @@ def resolve(host: str, port: int) -> str:
         raise ImapError(f"The server {host} can't be found") from exc
     for info in infos:
         address = info[4][0]
-        ip = ipaddress.ip_address(address)
-        if not ip.is_global and not _allow_private():
+        if not _is_public(ipaddress.ip_address(address)) and not _allow_private():
             continue
         return address
     raise ImapError(f"The server {host} is in a private network, which is not allowed")
@@ -105,7 +125,9 @@ def connect(account: Account) -> imaplib.IMAP4:
         text = (
             str(exc).replace(account.password, "***") if account.password else str(exc)
         )
-        raise ImapError(f"Login failed: {text[:200]}") from exc
+        # "from None": the server's own error text (which a log's traceback
+        # would print) never reaches the log next to this one.
+        raise ImapError(f"Login failed: {text[:200]}") from None
     except OSError as exc:
         raise ImapError(f"Can't reach {account.host}:{account.port}: {exc}") from exc
     return conn
