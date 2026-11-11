@@ -211,9 +211,13 @@ export function MailboxSettings({
             ? t('inbox.addMailbox', 'Add mailbox')
             : t('inbox.editMailbox', 'Edit mailbox')
         }
+        onSubmit={(e) => {
+          e?.preventDefault()
+          if (!busy && canSave) void save()
+        }}
         footer={
           <>
-            <Button variant="subtle" onClick={() => setEditing(null)}>
+            <Button variant="default" onClick={() => setEditing(null)}>
               {t('common.cancel', 'Cancel')}
             </Button>
             <Button
@@ -224,7 +228,7 @@ export function MailboxSettings({
             >
               {t('inbox.test', 'Test connection')}
             </Button>
-            <Button loading={busy} disabled={!canSave} onClick={save}>
+            <Button type="submit" loading={busy} disabled={!canSave}>
               {t('common.save', 'Save')}
             </Button>
           </>
