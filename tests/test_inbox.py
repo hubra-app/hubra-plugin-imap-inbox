@@ -522,3 +522,18 @@ def test_open_widget(db, seeded_db, board):
     out = contracts.widget_data("inbox.open", {}, actor=seeded_db["admin"])
     assert [i["label"] for i in out["items"]] == ["Neu", "Alt"]
     assert out["total"] == 2 and out["items"][0]["sub"] == "Anna · 03.11. 09:00"
+
+
+def test_an_oversized_server_answer_is_refused():
+    # RFC822.SIZE comes from the server; a server that lies about it
+    # must not push more than a message may hold into the worker.
+    class Base:
+        def read(self, size):
+            return b"x" * size
+
+    class Conn(imap._CappedRead, Base):
+        pass
+
+    assert Conn().read(10) == b"x" * 10
+    with pytest.raises(imap.ImapError):
+        Conn().read(imap.MAX_LITERAL_BYTES + 1)
