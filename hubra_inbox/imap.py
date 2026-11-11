@@ -25,6 +25,11 @@ from flask import current_app
 TIMEOUT = 20
 # Messages above this size are stored with their headers only.
 MAX_MESSAGE_BYTES = 25 * 1024 * 1024
+# The most one server answer may hand over at once (an IMAP literal). The
+# size check above trusts the server's RFC822.SIZE; a server that lies (or
+# a hostile one a club points Hubra at) could otherwise send gigabytes into
+# the worker's memory.
+MAX_LITERAL_BYTES = MAX_MESSAGE_BYTES + 1024 * 1024
 
 
 class ImapError(Exception):
@@ -78,7 +83,16 @@ def resolve(host: str, port: int) -> str:
     raise ImapError(f"The server {host} is in a private network, which is not allowed")
 
 
-class _PinnedSSL(imaplib.IMAP4_SSL):
+class _CappedRead:
+    """Refuses a literal larger than MAX_LITERAL_BYTES before reading it."""
+
+    def read(self, size):
+        if size > MAX_LITERAL_BYTES:
+            raise ImapError("The server sent more than a message may hold")
+        return super().read(size)
+
+
+class _PinnedSSL(_CappedRead, imaplib.IMAP4_SSL):
     def __init__(self, host, port, address, context):
         self._address = address
         super().__init__(host, port, ssl_context=context, timeout=TIMEOUT)
@@ -88,7 +102,7 @@ class _PinnedSSL(imaplib.IMAP4_SSL):
         return self.ssl_context.wrap_socket(sock, server_hostname=self.host)
 
 
-class _PinnedPlain(imaplib.IMAP4):
+class _PinnedPlain(_CappedRead, imaplib.IMAP4):
     def __init__(self, host, port, address):
         self._address = address
         super().__init__(host, port, timeout=TIMEOUT)

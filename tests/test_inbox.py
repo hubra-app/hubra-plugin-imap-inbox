@@ -653,3 +653,18 @@ def test_attachment_file_names_are_made_safe(name, expected):
 def test_group_id_must_be_a_number(client, auth_headers, board, fake):
     resp = _create(client, groupId="1 OR 1=1")
     assert resp.status_code == 400
+
+
+def test_an_oversized_server_answer_is_refused():
+    # RFC822.SIZE comes from the server; a server that lies about it
+    # must not push more than a message may hold into the worker.
+    class Base:
+        def read(self, size):
+            return b"x" * size
+
+    class Conn(imap._CappedRead, Base):
+        pass
+
+    assert Conn().read(10) == b"x" * 10
+    with pytest.raises(imap.ImapError):
+        Conn().read(imap.MAX_LITERAL_BYTES + 1)
