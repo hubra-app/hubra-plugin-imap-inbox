@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Mailbox dialog: Abbrechen outlined like other dialogs, Enter saves.
 - The menu entry moves to the new sidebar area **Kommunikation**, next to Mail,
   Letters and Messengers. Needs a Hubra with that area (after 0.2.5); older
   versions show it under a heading of its own.
