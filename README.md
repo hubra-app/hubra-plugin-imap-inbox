@@ -4,7 +4,7 @@
 
 A plugin for [Hubra](https://hubra.club). Read club mailboxes hosted anywhere (Infomaniak, Hostpoint, Gmail with an app password...) inside Hubra. Read-only by default, each mailbox visible to one group, passwords stored encrypted.
 
-**Version** 1.2.0 · **Works with** Hubra >=0.2.1,<1 · **Plugin id** `imap-inbox`
+**Version** 1.3.0 · **Works with** Hubra >=0.2.1,<1 · **Plugin id** `imap-inbox`
 
 ## Install
 
